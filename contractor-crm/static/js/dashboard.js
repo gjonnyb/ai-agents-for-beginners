@@ -4,6 +4,7 @@
 async function renderDashboard(container) {
     container.innerHTML = `
         <div class="page-header"><h1 class="page-title">Dashboard</h1></div>
+        <div id="ai-status-banner"></div>
         <div id="kpi-row" class="kpi-grid"><div class="loading-text"><span class="spinner"></span> Loading KPIs...</div></div>
         <div class="grid-2">
             <div class="card">
@@ -37,6 +38,20 @@ async function renderDashboard(container) {
             <div class="card-body" id="dash-recs"><div class="loading-text"><span class="spinner"></span> Loading...</div></div>
         </div>
     `;
+
+    // Show AI status banner
+    const aiStatus = await API.get('/api/ai/status').catch(() => ({ ai_enabled: false }));
+    const banner = document.getElementById('ai-status-banner');
+    if (!aiStatus.ai_enabled) {
+        banner.innerHTML = `
+            <div class="ai-card" style="background:#fef2f2;border-color:#fca5a5;margin-bottom:16px">
+                <div class="ai-card-title" style="color:#dc2626">AI features not configured</div>
+                <div class="ai-card-body">
+                    AI-powered insights (relationship analysis, bid analysis, growth priorities) require an API key.
+                    <a href="#/settings" style="color:#1a56db;font-weight:600">Go to Settings</a> to configure securely.
+                </div>
+            </div>`;
+    }
 
     // Load all data in parallel
     const [summary, conc, pipeline, health, followups, recs] = await Promise.all([

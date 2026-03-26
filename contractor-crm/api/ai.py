@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from config.settings import get_settings
 from db.database import get_db
 from db.models import AIRecommendation, _utcnow
 
@@ -15,6 +16,20 @@ router = APIRouter()
 class RecommendationUpdate(BaseModel):
     status: str  # accepted, dismissed, completed
     acted_on_by: Optional[str] = None
+
+
+@router.get("/status")
+def ai_status():
+    """Check whether an LLM API key is configured (never exposes the key)."""
+    settings = get_settings()
+    anthropic_ok = bool(settings.anthropic_api_key)
+    openai_ok = bool(settings.openai_api_key)
+    return {
+        "ai_enabled": anthropic_ok or openai_ok,
+        "provider": "anthropic" if anthropic_ok else ("openai" if openai_ok else None),
+        "anthropic_configured": anthropic_ok,
+        "openai_configured": openai_ok,
+    }
 
 
 @router.post("/relationship-analysis/{customer_id}")
