@@ -101,18 +101,26 @@ def pipeline_value(db: Session = Depends(get_db)):
         "negotiation": 0.65,
         "won": 1.0,
     }
+    # Single grouped query instead of 2 queries per stage
+    rows = (
+        db.query(
+            Project.stage,
+            func.count(Project.id).label("cnt"),
+            func.coalesce(func.sum(Project.bid_amount), 0).label("total"),
+        )
+        .filter(Project.stage.in_(stage_weights.keys()))
+        .group_by(Project.stage)
+        .all()
+    )
+    stage_data = {r.stage: (r.cnt, r.total) for r in rows}
     result = {}
     for stage, weight in stage_weights.items():
-        total = (
-            db.query(func.coalesce(func.sum(Project.bid_amount), 0))
-            .filter(Project.stage == stage)
-            .scalar()
-        )
+        cnt, total = stage_data.get(stage, (0, 0))
         result[stage] = {
             "raw_value": total,
             "weighted_value": round(total * weight, 2),
             "weight": weight,
-            "count": db.query(func.count(Project.id)).filter(Project.stage == stage).scalar(),
+            "count": cnt,
         }
     result["total_weighted"] = sum(s["weighted_value"] for s in result.values())
     return result
@@ -161,24 +169,39 @@ def relationship_health(db: Session = Depends(get_db)):
 @router.get("/win-rate")
 def win_rate_analytics(db: Session = Depends(get_db)):
     """Win rate breakdown by project type and customer type."""
-    # By project type
+    # Single grouped query for all project types
+    rows = (
+        db.query(
+            Project.project_type,
+            Project.stage,
+            func.count(Project.id).label("cnt"),
+        )
+        .filter(Project.stage.in_(["won", "lost"]))
+        .group_by(Project.project_type, Project.stage)
+        .all()
+    )
+
+    type_stats: dict[str, dict[str, int]] = {}
+    won_total = 0
+    lost_total = 0
+    for r in rows:
+        bucket = type_stats.setdefault(r.project_type, {"won": 0, "lost": 0})
+        bucket[r.stage] = r.cnt
+        if r.stage == "won":
+            won_total += r.cnt
+        else:
+            lost_total += r.cnt
+
     by_type = {}
-    types = db.query(Project.project_type).distinct().all()
-    for (pt,) in types:
-        won = db.query(func.count(Project.id)).filter(Project.stage == "won", Project.project_type == pt).scalar()
-        lost = db.query(func.count(Project.id)).filter(Project.stage == "lost", Project.project_type == pt).scalar()
-        total = won + lost
+    for pt, stats in type_stats.items():
+        total = stats["won"] + stats["lost"]
         by_type[pt] = {
-            "won": won,
-            "lost": lost,
-            "win_rate": round(won / total * 100, 1) if total > 0 else 0,
+            "won": stats["won"],
+            "lost": stats["lost"],
+            "win_rate": round(stats["won"] / total * 100, 1) if total > 0 else 0,
         }
 
-    # Overall
-    won_total = db.query(func.count(Project.id)).filter(Project.stage == "won").scalar()
-    lost_total = db.query(func.count(Project.id)).filter(Project.stage == "lost").scalar()
     overall = won_total + lost_total
-
     return {
         "overall_win_rate": round(won_total / overall * 100, 1) if overall > 0 else 0,
         "by_project_type": by_type,

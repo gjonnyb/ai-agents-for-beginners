@@ -5,6 +5,8 @@ Anthropic as primary, OpenAI as fallback.
 """
 from __future__ import annotations
 
+import json
+
 from config.settings import get_settings
 
 
@@ -55,3 +57,15 @@ def chat(system_prompt: str, user_prompt: str) -> str:
         max_tokens=4096,
     )
     return response.choices[0].message.content
+
+
+def parse_json_response(response_text: str) -> dict:
+    """Parse a JSON response from an LLM, handling markdown code blocks."""
+    try:
+        text = response_text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            text = text.rsplit("```", 1)[0]
+        return json.loads(text)
+    except (json.JSONDecodeError, IndexError):
+        return {"raw_response": response_text}

@@ -85,7 +85,14 @@ def list_projects(
         q = q.filter(Project.customer_id == customer_id)
     if project_type:
         q = q.filter(Project.project_type == project_type)
-    return [_to_dict(p, db) for p in q.order_by(Project.created_at.desc()).all()]
+    projects = q.order_by(Project.created_at.desc()).all()
+    # Batch-load customer names to avoid N+1
+    cust_ids = {p.customer_id for p in projects}
+    cust_map = {
+        c.id: c.name
+        for c in db.query(Customer.id, Customer.name).filter(Customer.id.in_(cust_ids)).all()
+    } if cust_ids else {}
+    return [_to_dict(p, cust_map) for p in projects]
 
 
 @router.get("/pipeline")
@@ -128,12 +135,17 @@ def win_loss_analytics(db: Session = Depends(get_db)):
     }
 
 
+def _cust_map_for(db: Session, *projects: Project) -> dict[int, str]:
+    ids = {p.customer_id for p in projects}
+    return {c.id: c.name for c in db.query(Customer.id, Customer.name).filter(Customer.id.in_(ids)).all()} if ids else {}
+
+
 @router.get("/{project_id}")
 def get_project(project_id: int, db: Session = Depends(get_db)):
     p = db.query(Project).filter(Project.id == project_id).first()
     if not p:
         raise HTTPException(404, "Project not found")
-    return _to_dict(p, db)
+    return _to_dict(p, _cust_map_for(db, p))
 
 
 @router.post("", status_code=201)
@@ -142,7 +154,7 @@ def create_project(body: ProjectCreate, db: Session = Depends(get_db)):
     db.add(p)
     db.commit()
     db.refresh(p)
-    return _to_dict(p, db)
+    return _to_dict(p, _cust_map_for(db, p))
 
 
 @router.put("/{project_id}")
@@ -155,7 +167,7 @@ def update_project(project_id: int, body: ProjectUpdate, db: Session = Depends(g
     p.updated_at = _utcnow()
     db.commit()
     db.refresh(p)
-    return _to_dict(p, db)
+    return _to_dict(p, _cust_map_for(db, p))
 
 
 @router.patch("/{project_id}/stage")
@@ -169,18 +181,14 @@ def update_stage(project_id: int, body: StageUpdate, db: Session = Depends(get_d
     p.updated_at = _utcnow()
     db.commit()
     db.refresh(p)
-    return _to_dict(p, db)
+    return _to_dict(p, _cust_map_for(db, p))
 
 
-def _to_dict(p: Project, db: Session) -> dict:
-    customer_name = ""
-    cust = db.query(Customer).filter(Customer.id == p.customer_id).first()
-    if cust:
-        customer_name = cust.name
+def _to_dict(p: Project, cust_map: dict[int, str]) -> dict:
     return {
         "id": p.id,
         "customer_id": p.customer_id,
-        "customer_name": customer_name,
+        "customer_name": cust_map.get(p.customer_id, ""),
         "name": p.name,
         "description": p.description,
         "project_type": p.project_type,

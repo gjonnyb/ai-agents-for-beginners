@@ -5,7 +5,7 @@ import json
 
 from sqlalchemy.orm import Session
 
-from agents.base import chat
+from agents.base import chat, parse_json_response
 from db.models import Customer, Prospect
 from services.concentration import concentration_analysis
 from services.scoring import refresh_all_scores
@@ -59,16 +59,7 @@ def concentration_review(db: Session) -> dict:
         CONCENTRATION_SYSTEM_PROMPT,
         f"Revenue concentration data:\n{json.dumps(analysis, indent=2)}",
     )
-
-    try:
-        text = response_text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            text = text.rsplit("```", 1)[0]
-        result = json.loads(text)
-    except json.JSONDecodeError:
-        result = {"raw_response": response_text}
-
+    result = parse_json_response(response_text)
     result["concentration_data"] = analysis
     return result
 
@@ -110,14 +101,4 @@ def growth_priorities(db: Session) -> dict:
         GROWTH_SYSTEM_PROMPT,
         json.dumps(context, indent=2),
     )
-
-    try:
-        text = response_text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            text = text.rsplit("```", 1)[0]
-        result = json.loads(text)
-    except json.JSONDecodeError:
-        result = {"raw_response": response_text}
-
-    return result
+    return parse_json_response(response_text)

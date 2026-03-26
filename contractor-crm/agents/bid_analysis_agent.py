@@ -6,7 +6,7 @@ import json
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from agents.base import chat
+from agents.base import chat, parse_json_response
 from db.models import Customer, Project, RevenueRecord
 from services.scoring import score_customer
 
@@ -105,16 +105,7 @@ def analyze_bid(project_id: int, db: Session) -> dict:
     }
 
     response_text = chat(SYSTEM_PROMPT, json.dumps(context, indent=2))
-
-    try:
-        text = response_text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            text = text.rsplit("```", 1)[0]
-        result = json.loads(text)
-    except json.JSONDecodeError:
-        result = {"raw_response": response_text}
-
+    result = parse_json_response(response_text)
     result["project_id"] = project_id
     result["project_name"] = project.name
     result["customer_name"] = customer.name if customer else "Unknown"

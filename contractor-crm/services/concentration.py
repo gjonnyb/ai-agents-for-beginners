@@ -43,13 +43,19 @@ def concentration_analysis(
     hhi = 0.0
     flags = []
 
+    # Batch-load all customer names in one query to avoid N+1
+    customer_ids = [r.customer_id for r in rows]
+    cust_map = {
+        c.id: c.name
+        for c in db.query(Customer.id, Customer.name).filter(Customer.id.in_(customer_ids)).all()
+    }
+
     for r in rows:
-        cust = db.query(Customer).filter(Customer.id == r.customer_id).first()
         share_pct = (r.total / total_revenue * 100) if total_revenue > 0 else 0
         hhi += share_pct ** 2
         entry = {
             "customer_id": r.customer_id,
-            "customer_name": cust.name if cust else "Unknown",
+            "customer_name": cust_map.get(r.customer_id, "Unknown"),
             "revenue": r.total,
             "share_pct": round(share_pct, 1),
         }
@@ -97,12 +103,13 @@ def concentration_trend(db: Session) -> list[dict]:
         .order_by(RevenueRecord.fiscal_year)
         .all()
     )
-    return [
-        {
+    results = []
+    for y in years:
+        analysis = concentration_analysis(db, y[0])
+        results.append({
             "fiscal_year": y[0],
-            "hhi": concentration_analysis(db, y[0])["hhi"],
-            "level": concentration_analysis(db, y[0])["concentration_level"],
-            "total_revenue": concentration_analysis(db, y[0])["total_revenue"],
-        }
-        for y in years
-    ]
+            "hhi": analysis["hhi"],
+            "level": analysis["concentration_level"],
+            "total_revenue": analysis["total_revenue"],
+        })
+    return results

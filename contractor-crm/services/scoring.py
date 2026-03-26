@@ -209,10 +209,14 @@ def refresh_all_scores(db: Session) -> list[dict]:
     """Recompute and persist scores for all active customers."""
     customers = db.query(Customer).filter(Customer.status == "active").all()
     results = []
+    changed = False
     for c in customers:
         result = score_customer(c.id, db)
-        c.relationship_score = result["score"]
-        c.relationship_tier = result["tier"]
+        if c.relationship_score != result["score"] or c.relationship_tier != result["tier"]:
+            c.relationship_score = result["score"]
+            c.relationship_tier = result["tier"]
+            changed = True
         results.append({"customer_id": c.id, "name": c.name, **result})
-    db.commit()
+    if changed:
+        db.commit()
     return results

@@ -6,7 +6,7 @@ import json
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from agents.base import chat
+from agents.base import chat, parse_json_response
 from db.models import (
     Contact,
     Customer,
@@ -144,18 +144,7 @@ def analyze_relationship(customer_id: int, db: Session) -> dict:
     )
 
     response_text = chat(SYSTEM_PROMPT, user_prompt)
-
-    # Parse JSON from response
-    try:
-        # Handle markdown code blocks
-        text = response_text.strip()
-        if text.startswith("```"):
-            text = text.split("\n", 1)[1]
-            text = text.rsplit("```", 1)[0]
-        result = json.loads(text)
-    except json.JSONDecodeError:
-        result = {"raw_response": response_text}
-
+    result = parse_json_response(response_text)
     result["customer_id"] = customer_id
     result["customer_name"] = customer.name
     result["relationship_score"] = scoring["score"]
