@@ -170,107 +170,131 @@ async function renderSettings(container) {
 
     const status = await API.get('/api/ai/status');
 
+    function statusBanner(s) {
+        if (!s.ai_enabled) {
+            return `<div class="ai-card" style="background:#fef2f2;border-color:#fca5a5;">
+                <div class="ai-card-title" style="color:#dc2626;">AI features are disabled</div>
+                <div class="ai-card-body">Enter at least one API key below to activate AI-powered insights.</div>
+            </div>`;
+        }
+        return `<div class="ai-card" style="background:#f0fdf4;border-color:#86efac;">
+            <div class="ai-card-title" style="color:#16a34a;">AI features are active</div>
+            <div class="ai-card-body">Using <strong>${s.provider === 'anthropic' ? 'Anthropic Claude' : 'OpenAI GPT-4o'}</strong> for AI-powered insights.</div>
+        </div>`;
+    }
+
+    function statusCards(s) {
+        return `<div class="kpi-grid" style="margin-bottom:20px">
+            <div class="kpi-card">
+                <div class="kpi-label">AI Features</div>
+                <div class="kpi-value ${s.ai_enabled ? 'positive' : 'danger'}">${s.ai_enabled ? 'Active' : 'Not Configured'}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Provider</div>
+                <div class="kpi-value">${s.provider ? s.provider.charAt(0).toUpperCase() + s.provider.slice(1) : 'None'}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Anthropic (Claude)</div>
+                <div class="kpi-value ${s.anthropic_configured ? 'positive' : 'danger'}">${s.anthropic_configured ? 'Configured' : 'Missing'}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">OpenAI (GPT-4o)</div>
+                <div class="kpi-value ${s.openai_configured ? 'positive' : 'danger'}">${s.openai_configured ? 'Configured' : 'Missing'}</div>
+            </div>
+        </div>`;
+    }
+
     container.innerHTML = `
         <div class="page-header"><h1 class="page-title">Settings</h1></div>
 
         <div class="card">
-            <div class="card-header">AI Configuration Status</div>
+            <div class="card-header">AI Configuration</div>
             <div class="card-body">
-                <div class="kpi-grid" style="margin-bottom:20px">
-                    <div class="kpi-card">
-                        <div class="kpi-label">AI Features</div>
-                        <div class="kpi-value ${status.ai_enabled ? 'positive' : 'danger'}">${status.ai_enabled ? 'Active' : 'Not Configured'}</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Provider</div>
-                        <div class="kpi-value">${status.provider ? status.provider.charAt(0).toUpperCase() + status.provider.slice(1) : 'None'}</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">Anthropic (Claude)</div>
-                        <div class="kpi-value ${status.anthropic_configured ? 'positive' : 'danger'}">${status.anthropic_configured ? 'Configured' : 'Missing'}</div>
-                    </div>
-                    <div class="kpi-card">
-                        <div class="kpi-label">OpenAI (GPT-4o)</div>
-                        <div class="kpi-value ${status.openai_configured ? 'positive' : 'danger'}">${status.openai_configured ? 'Configured' : 'Missing'}</div>
-                    </div>
-                </div>
-
-                ${!status.ai_enabled ? `
-                <div class="ai-card" style="background: #fef2f2; border-color: #fca5a5;">
-                    <div class="ai-card-title" style="color: #dc2626;">AI features are disabled</div>
-                    <div class="ai-card-body">
-                        No API key is configured. The CRM works fully without AI, but features like
-                        relationship analysis, next-action recommendations, bid analysis, and growth
-                        prioritization require an LLM API key.
-                    </div>
-                </div>
-                ` : `
-                <div class="ai-card" style="background: #f0fdf4; border-color: #86efac;">
-                    <div class="ai-card-title" style="color: #16a34a;">AI features are active</div>
-                    <div class="ai-card-body">
-                        Using <strong>${status.provider === 'anthropic' ? 'Anthropic Claude' : 'OpenAI GPT-4o'}</strong> for AI-powered insights.
-                        Your API key is stored securely in your local <code>.env</code> file and is never exposed to the browser.
-                    </div>
-                </div>
-                `}
+                <div id="settings-status-cards">${statusCards(status)}</div>
+                <div id="settings-status-banner">${statusBanner(status)}</div>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">How to Configure Your API Key</div>
+            <div class="card-header">API Keys</div>
             <div class="card-body">
-                <p style="margin-bottom:16px">
-                    API keys are stored in a <code>.env</code> file in the <code>contractor-crm/</code> directory.
-                    This file is <strong>gitignored</strong> and never committed to version control.
-                    The key is only read server-side — it is never sent to the browser.
+                <p style="margin-bottom:16px;color:#6b7280">
+                    Keys are saved to a local <code>.env</code> file on the server. They are <strong>never</strong>
+                    committed to git or exposed to the browser. Only one key is required — Anthropic is used first if both are set.
                 </p>
-
-                <h4 style="margin-bottom:8px">Step 1: Open your terminal</h4>
-                <p class="text-muted" style="margin-bottom:12px">Navigate to the contractor-crm directory where the app is running.</p>
-
-                <h4 style="margin-bottom:8px">Step 2: Create the .env file</h4>
-                <p class="text-muted" style="margin-bottom:8px">Copy the example file and add your key. Run one of:</p>
-
-                <div style="background:#1f2937;color:#e5e7eb;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;margin-bottom:16px;overflow-x:auto">
-                    <div style="color:#9ca3af"># Option A: Use Anthropic (Claude) — recommended</div>
-                    <div>cp .env.example .env</div>
-                    <div style="color:#9ca3af"># Then edit .env and set:</div>
-                    <div>ANTHROPIC_API_KEY=sk-ant-your-key-here</div>
-                    <br>
-                    <div style="color:#9ca3af"># Option B: Use OpenAI (GPT-4o)</div>
-                    <div>OPENAI_API_KEY=sk-your-key-here</div>
-                </div>
-
-                <div style="background:#1f2937;color:#e5e7eb;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;margin-bottom:16px;overflow-x:auto">
-                    <div style="color:#9ca3af"># Quick one-liner for macOS/Linux:</div>
-                    <div>echo 'ANTHROPIC_API_KEY=sk-ant-your-key-here' > .env</div>
-                </div>
-
-                <h4 style="margin-bottom:8px">Step 3: Restart the server</h4>
-                <p class="text-muted" style="margin-bottom:8px">Stop the server (Ctrl+C) and restart it:</p>
-                <div style="background:#1f2937;color:#e5e7eb;padding:16px;border-radius:8px;font-family:monospace;font-size:13px;margin-bottom:16px">
-                    <div>python3 main.py</div>
-                </div>
-
-                <h4 style="margin-bottom:8px">Step 4: Verify</h4>
-                <p class="text-muted">Reload this page. The status above should show "Active".</p>
+                <form id="api-key-form" autocomplete="off">
+                    <div class="form-group" style="margin-bottom:16px">
+                        <label style="display:block;font-weight:600;margin-bottom:6px">Anthropic API Key (Claude) — recommended</label>
+                        <input type="password" id="anthropic-key-input" class="form-control"
+                            placeholder="${status.anthropic_configured ? 'Key is configured — enter new value to replace' : 'sk-ant-...'}"
+                            style="font-family:monospace;max-width:520px">
+                    </div>
+                    <div class="form-group" style="margin-bottom:20px">
+                        <label style="display:block;font-weight:600;margin-bottom:6px">OpenAI API Key (GPT-4o) — fallback</label>
+                        <input type="password" id="openai-key-input" class="form-control"
+                            placeholder="${status.openai_configured ? 'Key is configured — enter new value to replace' : 'sk-...'}"
+                            style="font-family:monospace;max-width:520px">
+                    </div>
+                    <div style="display:flex;align-items:center;gap:16px">
+                        <button type="submit" class="btn btn-primary" id="save-keys-btn">Save Keys</button>
+                        <span id="save-keys-msg" style="font-size:14px"></span>
+                    </div>
+                </form>
             </div>
         </div>
 
         <div class="card">
-            <div class="card-header">Security Notes</div>
+            <div class="card-header">Security</div>
             <div class="card-body">
                 <ul style="line-height:2">
-                    <li>The <code>.env</code> file is listed in <code>.gitignore</code> — it will <strong>never</strong> be committed to git</li>
-                    <li>The API key is read <strong>server-side only</strong> — it is never sent to the browser or frontend</li>
-                    <li>The <code>/api/ai/status</code> endpoint reports whether a key is configured, but never reveals the key itself</li>
-                    <li>Only one key is required (Anthropic <em>or</em> OpenAI). Anthropic is used first if both are set</li>
+                    <li>Keys are stored in <code>.env</code> which is <strong>gitignored</strong> — never committed to version control</li>
+                    <li>Keys are read <strong>server-side only</strong> and never returned to the browser</li>
+                    <li>This app is designed to run on <strong>localhost</strong> — do not expose it to the public internet without adding authentication</li>
                     <li>Get your Anthropic API key at <strong>console.anthropic.com</strong></li>
                     <li>Get your OpenAI API key at <strong>platform.openai.com</strong></li>
                 </ul>
             </div>
         </div>
     `;
+
+    document.getElementById('api-key-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('save-keys-btn');
+        const msg = document.getElementById('save-keys-msg');
+        const anthropicVal = document.getElementById('anthropic-key-input').value.trim();
+        const openaiVal = document.getElementById('openai-key-input').value.trim();
+
+        if (!anthropicVal && !openaiVal) {
+            msg.style.color = '#dc2626';
+            msg.textContent = 'Enter at least one key.';
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = 'Saving...';
+        msg.textContent = '';
+
+        const payload = {};
+        if (anthropicVal) payload.anthropic_api_key = anthropicVal;
+        if (openaiVal) payload.openai_api_key = openaiVal;
+
+        try {
+            const result = await API.post('/api/ai/configure-keys', payload);
+            msg.style.color = '#16a34a';
+            msg.textContent = result.ai_enabled ? 'Saved! AI features are now active.' : 'Saved. Add a valid key to enable AI.';
+            document.getElementById('anthropic-key-input').value = '';
+            document.getElementById('openai-key-input').value = '';
+            document.getElementById('anthropic-key-input').placeholder = result.anthropic_configured ? 'Key is configured — enter new value to replace' : 'sk-ant-...';
+            document.getElementById('openai-key-input').placeholder = result.openai_configured ? 'Key is configured — enter new value to replace' : 'sk-...';
+            document.getElementById('settings-status-cards').innerHTML = statusCards(result);
+            document.getElementById('settings-status-banner').innerHTML = statusBanner(result);
+        } catch (err) {
+            msg.style.color = '#dc2626';
+            msg.textContent = 'Error saving keys. Check the server logs.';
+        }
+        btn.disabled = false;
+        btn.textContent = 'Save Keys';
+    });
 }
 
 // Boot

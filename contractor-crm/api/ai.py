@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -12,10 +13,17 @@ from db.models import AIRecommendation, _utcnow
 
 router = APIRouter()
 
+ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+
 
 class RecommendationUpdate(BaseModel):
     status: str  # accepted, dismissed, completed
     acted_on_by: Optional[str] = None
+
+
+class ApiKeyUpdate(BaseModel):
+    anthropic_api_key: Optional[str] = None
+    openai_api_key: Optional[str] = None
 
 
 @router.get("/status")
@@ -25,6 +33,47 @@ def ai_status():
     anthropic_ok = bool(settings.anthropic_api_key)
     openai_ok = bool(settings.openai_api_key)
     return {
+        "ai_enabled": anthropic_ok or openai_ok,
+        "provider": "anthropic" if anthropic_ok else ("openai" if openai_ok else None),
+        "anthropic_configured": anthropic_ok,
+        "openai_configured": openai_ok,
+    }
+
+
+@router.post("/configure-keys")
+def configure_keys(body: ApiKeyUpdate):
+    """Save API keys to the .env file and reload settings."""
+    # Read existing .env entries (preserve non-key settings)
+    existing: dict[str, str] = {}
+    if ENV_PATH.exists():
+        for line in ENV_PATH.read_text().splitlines():
+            line = line.strip()
+            if "=" in line and not line.startswith("#"):
+                k, v = line.split("=", 1)
+                existing[k.strip()] = v.strip()
+
+    if body.anthropic_api_key is not None:
+        if body.anthropic_api_key:
+            existing["ANTHROPIC_API_KEY"] = body.anthropic_api_key
+        else:
+            existing.pop("ANTHROPIC_API_KEY", None)
+
+    if body.openai_api_key is not None:
+        if body.openai_api_key:
+            existing["OPENAI_API_KEY"] = body.openai_api_key
+        else:
+            existing.pop("OPENAI_API_KEY", None)
+
+    ENV_PATH.write_text("\n".join(f"{k}={v}" for k, v in existing.items()) + "\n")
+
+    # Clear cached settings so the new keys take effect immediately
+    get_settings.cache_clear()
+
+    settings = get_settings()
+    anthropic_ok = bool(settings.anthropic_api_key)
+    openai_ok = bool(settings.openai_api_key)
+    return {
+        "saved": True,
         "ai_enabled": anthropic_ok or openai_ok,
         "provider": "anthropic" if anthropic_ok else ("openai" if openai_ok else None),
         "anthropic_configured": anthropic_ok,
